@@ -80,7 +80,10 @@ func loadFile(path string) ([]Resource, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	return LoadYAML(path, content)
+}
 
+func LoadYAML(source string, content []byte) ([]Resource, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	var resources []Resource
 	for {
@@ -90,14 +93,14 @@ func loadFile(path string) ([]Resource, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("parse %s: %w", path, err)
+			return nil, fmt.Errorf("parse %s: %w", source, err)
 		}
 		if len(doc) == 0 {
 			continue
 		}
 
 		resource := Resource{
-			File:       path,
+			File:       source,
 			APIVersion: stringValue(doc["apiVersion"]),
 			Kind:       stringValue(doc["kind"]),
 			Metadata:   metadataValue(doc["metadata"]),

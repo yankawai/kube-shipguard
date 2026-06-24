@@ -13,6 +13,7 @@ import (
 	"github.com/yankawai/kube-shipguard/internal/baseline"
 	"github.com/yankawai/kube-shipguard/internal/config"
 	"github.com/yankawai/kube-shipguard/internal/gitdiff"
+	"github.com/yankawai/kube-shipguard/internal/render"
 	"github.com/yankawai/kube-shipguard/internal/report"
 	"github.com/yankawai/kube-shipguard/internal/scanner"
 	"github.com/yankawai/kube-shipguard/internal/tui"
@@ -24,6 +25,27 @@ var (
 	version = "dev"
 	commit  = "unknown"
 )
+
+type multiFlag []string
+
+func (m *multiFlag) String() string {
+	return strings.Join(*m, ",")
+}
+
+func (m *multiFlag) Set(value string) error {
+	*m = append(*m, value)
+	return nil
+}
+
+type inputOptions struct {
+	Paths         []string
+	ChangedFrom   string
+	HelmChart     string
+	HelmRelease   string
+	HelmNamespace string
+	HelmValues    []string
+	KustomizePath string
+}
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
@@ -66,31 +88,34 @@ func runScan(args []string, stdout io.Writer) error {
 	baselinePath := flags.String("baseline", "", "ignore findings already captured in a baseline file")
 	configPath := flags.String("config", "", "configuration file with expiring suppressions")
 	changedFrom := flags.String("changed-from", "", "only scan YAML files changed from the git ref or range")
+	helmChart := flags.String("helm-chart", "", "render a Helm chart before scanning")
+	helmRelease := flags.String("helm-release", "", "Helm release name for rendered manifests")
+	helmNamespace := flags.String("helm-namespace", "", "Helm namespace for rendered manifests")
+	var helmValues multiFlag
+	flags.Var(&helmValues, "helm-values", "Helm values file; may be repeated")
+	kustomizePath := flags.String("kustomize", "", "render a Kustomize directory before scanning")
 	if err := flags.Parse(normalizeScanArgs(args)); err != nil {
 		return err
 	}
 
 	paths := flags.Args()
-	if len(paths) == 0 && *changedFrom == "" {
+	if len(paths) == 0 && *changedFrom == "" && *helmChart == "" && *kustomizePath == "" {
 		return errors.New("scan requires at least one file or directory")
 	}
 
-	var err error
-	if *changedFrom != "" {
-		paths, err = gitdiff.ChangedYAML(*changedFrom, paths)
-		if err != nil {
-			return err
-		}
+	resources, err := loadInputs(inputOptions{
+		Paths:         paths,
+		ChangedFrom:   *changedFrom,
+		HelmChart:     *helmChart,
+		HelmRelease:   *helmRelease,
+		HelmNamespace: *helmNamespace,
+		HelmValues:    helmValues,
+		KustomizePath: *kustomizePath,
+	})
+	if err != nil {
+		return err
 	}
-
-	var findings []analyzer.Finding
-	if len(paths) > 0 {
-		resources, err := scanner.Load(paths)
-		if err != nil {
-			return err
-		}
-		findings = analyzer.New().Analyze(resources)
-	}
+	findings := analyzer.New().Analyze(resources)
 	configResult, err := config.Apply(*configPath, findings, time.Now())
 	if err != nil {
 		return err
@@ -141,6 +166,57 @@ func runScan(args []string, stdout io.Writer) error {
 		return fmt.Errorf("findings met fail-on threshold %q", *failOn)
 	}
 	return nil
+}
+
+func loadInputs(options inputOptions) ([]scanner.Resource, error) {
+	paths := options.Paths
+	var err error
+	if options.ChangedFrom != "" {
+		paths, err = gitdiff.ChangedYAML(options.ChangedFrom, paths)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var resources []scanner.Resource
+	if len(paths) > 0 {
+		loaded, err := scanner.Load(paths)
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, loaded...)
+	}
+
+	if options.HelmChart != "" {
+		rendered, err := render.Helm(render.HelmOptions{
+			Chart:     options.HelmChart,
+			Release:   options.HelmRelease,
+			Namespace: options.HelmNamespace,
+			Values:    options.HelmValues,
+		})
+		if err != nil {
+			return nil, err
+		}
+		loaded, err := scanner.LoadYAML(rendered.Source, rendered.Content)
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, loaded...)
+	}
+
+	if options.KustomizePath != "" {
+		rendered, err := render.Kustomize(options.KustomizePath)
+		if err != nil {
+			return nil, err
+		}
+		loaded, err := scanner.LoadYAML(rendered.Source, rendered.Content)
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, loaded...)
+	}
+
+	return resources, nil
 }
 
 func runBaseline(args []string, stdout io.Writer) error {
@@ -198,7 +274,7 @@ func normalizeScanArgs(args []string) []string {
 	pathArgs := make([]string, 0, len(args))
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if arg == "--format" || arg == "--output" || arg == "--fail-on" || arg == "--baseline" || arg == "--config" || arg == "--changed-from" {
+		if arg == "--format" || arg == "--output" || arg == "--fail-on" || arg == "--baseline" || arg == "--config" || arg == "--changed-from" || arg == "--helm-chart" || arg == "--helm-release" || arg == "--helm-namespace" || arg == "--helm-values" || arg == "--kustomize" {
 			flagArgs = append(flagArgs, arg)
 			if index+1 < len(args) {
 				index++
@@ -206,7 +282,7 @@ func normalizeScanArgs(args []string) []string {
 			}
 			continue
 		}
-		if strings.HasPrefix(arg, "--format=") || strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--fail-on=") || strings.HasPrefix(arg, "--baseline=") || strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "--changed-from=") {
+		if strings.HasPrefix(arg, "--format=") || strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--fail-on=") || strings.HasPrefix(arg, "--baseline=") || strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "--changed-from=") || strings.HasPrefix(arg, "--helm-chart=") || strings.HasPrefix(arg, "--helm-release=") || strings.HasPrefix(arg, "--helm-namespace=") || strings.HasPrefix(arg, "--helm-values=") || strings.HasPrefix(arg, "--kustomize=") {
 			flagArgs = append(flagArgs, arg)
 			continue
 		}
@@ -291,6 +367,9 @@ Scan flags:
   --baseline ignore known findings from a baseline file
   --config   config file with expiring suppressions
   --changed-from only scan YAML files changed from a git ref or range
+  --helm-chart render a Helm chart before scanning
+  --helm-values Helm values file; may be repeated
+  --kustomize render a Kustomize directory before scanning
 
 Baseline flags:
   --output   baseline output file`)
