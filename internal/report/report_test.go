@@ -30,6 +30,27 @@ func TestWriteJSON(t *testing.T) {
 	if decoded.Summary.High != 1 || decoded.Summary.Total != 1 {
 		t.Fatalf("unexpected summary: %#v", decoded.Summary)
 	}
+	if decoded.Summary.Verdict != "BLOCK" || decoded.Summary.RiskScore != 10 {
+		t.Fatalf("unexpected verdict summary: %#v", decoded.Summary)
+	}
+}
+
+func TestWriteTextIncludesVerdict(t *testing.T) {
+	var buffer bytes.Buffer
+	err := WriteText(&buffer, []analyzer.Finding{{
+		RuleID:   "KSG006",
+		Severity: analyzer.SeverityHigh,
+		Message:  "mutable image",
+		File:     "deployment.yaml",
+		Kind:     "Deployment",
+		Name:     "api",
+	}})
+	if err != nil {
+		t.Fatalf("write text: %v", err)
+	}
+	if !strings.Contains(buffer.String(), "Kube ShipGuard verdict: BLOCK (risk score 10)") {
+		t.Fatalf("missing verdict: %s", buffer.String())
+	}
 }
 
 func TestWriteSARIF(t *testing.T) {
@@ -51,5 +72,8 @@ func TestWriteSARIF(t *testing.T) {
 	}
 	if !strings.Contains(buffer.String(), `"ruleId": "KSG006"`) {
 		t.Fatalf("missing sarif rule: %s", buffer.String())
+	}
+	if !strings.Contains(buffer.String(), `"verdict": "BLOCK"`) {
+		t.Fatalf("missing sarif verdict: %s", buffer.String())
 	}
 }

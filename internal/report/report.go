@@ -8,13 +8,16 @@ import (
 	"strings"
 
 	"github.com/yankawai/kube-shipguard/internal/analyzer"
+	"github.com/yankawai/kube-shipguard/internal/verdict"
 )
 
 type Summary struct {
-	Total  int `json:"total"`
-	High   int `json:"high"`
-	Medium int `json:"medium"`
-	Low    int `json:"low"`
+	Total     int    `json:"total"`
+	High      int    `json:"high"`
+	Medium    int    `json:"medium"`
+	Low       int    `json:"low"`
+	Verdict   string `json:"verdict"`
+	RiskScore int    `json:"risk_score"`
 }
 
 type JSONReport struct {
@@ -24,6 +27,10 @@ type JSONReport struct {
 
 func WriteText(writer io.Writer, findings []analyzer.Finding) error {
 	sortFindings(findings)
+	evaluation := verdict.Evaluate(findings)
+	if _, err := fmt.Fprintf(writer, "Kube ShipGuard verdict: %s (risk score %d)\n", evaluation.Label, evaluation.RiskScore); err != nil {
+		return err
+	}
 	if len(findings) == 0 {
 		_, err := fmt.Fprintln(writer, "Kube ShipGuard found no findings")
 		return err
@@ -60,6 +67,7 @@ func WriteJSON(writer io.Writer, findings []analyzer.Finding) error {
 
 func WriteSARIF(writer io.Writer, findings []analyzer.Finding) error {
 	sortFindings(findings)
+	evaluation := verdict.Evaluate(findings)
 	rulesByID := make(map[string]sarifRule)
 	results := make([]sarifResult, 0, len(findings))
 	for _, finding := range findings {
@@ -107,6 +115,10 @@ func WriteSARIF(writer io.Writer, findings []analyzer.Finding) error {
 				Rules:           rules,
 			}},
 			Results: results,
+			Properties: map[string]any{
+				"verdict":    string(evaluation.Label),
+				"risk_score": evaluation.RiskScore,
+			},
 		}},
 	}
 
@@ -117,6 +129,7 @@ func WriteSARIF(writer io.Writer, findings []analyzer.Finding) error {
 
 func summarize(findings []analyzer.Finding) Summary {
 	var summary Summary
+	evaluation := verdict.Evaluate(findings)
 	for _, finding := range findings {
 		summary.Total++
 		switch finding.Severity {
@@ -128,6 +141,8 @@ func summarize(findings []analyzer.Finding) Summary {
 			summary.Low++
 		}
 	}
+	summary.Verdict = string(evaluation.Label)
+	summary.RiskScore = evaluation.RiskScore
 	return summary
 }
 
@@ -163,8 +178,9 @@ type sarifDocument struct {
 }
 
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Tool       sarifTool      `json:"tool"`
+	Results    []sarifResult  `json:"results"`
+	Properties map[string]any `json:"properties,omitempty"`
 }
 
 type sarifTool struct {

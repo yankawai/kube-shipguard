@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/yankawai/kube-shipguard/internal/analyzer"
+	"github.com/yankawai/kube-shipguard/internal/verdict"
 )
 
 type Model struct {
@@ -157,7 +158,8 @@ func (m Model) header(filtered []analyzer.Finding) string {
 
 func (m Model) brandView(filtered []analyzer.Finding) string {
 	high, medium, low := countBySeverity(m.findings)
-	status := gateStatus(high, medium)
+	evaluation := verdict.Evaluate(m.findings)
+	status := gateStatus(evaluation.Label)
 	logo := logoStyle.Render(shipguardLogo)
 	meta := strings.Join([]string{
 		labelStyle.Render("KUBERNETES RELEASE READINESS"),
@@ -168,6 +170,7 @@ func (m Model) brandView(filtered []analyzer.Finding) string {
 			lowStyle.Render(fmt.Sprintf("%d low", low)),
 			mutedStyle.Render(fmt.Sprintf("%d visible", len(filtered))),
 		),
+		mutedStyle.Render(fmt.Sprintf("risk score %d", evaluation.RiskScore)),
 		riskBar(high, medium, low),
 	}, "\n")
 
@@ -182,11 +185,11 @@ type statusLabel struct {
 	style lipgloss.Style
 }
 
-func gateStatus(high, medium int) statusLabel {
-	switch {
-	case high > 0:
+func gateStatus(label verdict.Label) statusLabel {
+	switch label {
+	case verdict.LabelBlock:
 		return statusLabel{label: "GATE: BLOCK", style: highStyle}
-	case medium > 0:
+	case verdict.LabelReview:
 		return statusLabel{label: "GATE: REVIEW", style: mediumStyle}
 	default:
 		return statusLabel{label: "GATE: SHIP", style: successStyle}
