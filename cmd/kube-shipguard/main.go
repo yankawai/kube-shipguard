@@ -223,16 +223,29 @@ func runBaseline(args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("baseline", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	output := flags.String("output", ".kube-shipguard-baseline.yaml", "baseline output file")
-	if err := flags.Parse(normalizeOutputArgs(args)); err != nil {
+	helmChart := flags.String("helm-chart", "", "render a Helm chart before scanning")
+	helmRelease := flags.String("helm-release", "", "Helm release name for rendered manifests")
+	helmNamespace := flags.String("helm-namespace", "", "Helm namespace for rendered manifests")
+	var helmValues multiFlag
+	flags.Var(&helmValues, "helm-values", "Helm values file; may be repeated")
+	kustomizePath := flags.String("kustomize", "", "render a Kustomize directory before scanning")
+	if err := flags.Parse(normalizeBaselineArgs(args)); err != nil {
 		return err
 	}
 
 	paths := flags.Args()
-	if len(paths) == 0 {
+	if len(paths) == 0 && *helmChart == "" && *kustomizePath == "" {
 		return errors.New("baseline requires at least one file or directory")
 	}
 
-	resources, err := scanner.Load(paths)
+	resources, err := loadInputs(inputOptions{
+		Paths:         paths,
+		HelmChart:     *helmChart,
+		HelmRelease:   *helmRelease,
+		HelmNamespace: *helmNamespace,
+		HelmValues:    helmValues,
+		KustomizePath: *kustomizePath,
+	})
 	if err != nil {
 		return err
 	}
@@ -248,14 +261,27 @@ func runReview(args []string) error {
 	flags := flag.NewFlagSet("review", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	configPath := flags.String("config", "", "configuration file with expiring suppressions")
-	if err := flags.Parse(normalizeConfigArgs(args)); err != nil {
+	helmChart := flags.String("helm-chart", "", "render a Helm chart before scanning")
+	helmRelease := flags.String("helm-release", "", "Helm release name for rendered manifests")
+	helmNamespace := flags.String("helm-namespace", "", "Helm namespace for rendered manifests")
+	var helmValues multiFlag
+	flags.Var(&helmValues, "helm-values", "Helm values file; may be repeated")
+	kustomizePath := flags.String("kustomize", "", "render a Kustomize directory before scanning")
+	if err := flags.Parse(normalizeReviewArgs(args)); err != nil {
 		return err
 	}
 	paths := flags.Args()
-	if len(paths) == 0 {
+	if len(paths) == 0 && *helmChart == "" && *kustomizePath == "" {
 		return errors.New("review requires at least one file or directory")
 	}
-	resources, err := scanner.Load(paths)
+	resources, err := loadInputs(inputOptions{
+		Paths:         paths,
+		HelmChart:     *helmChart,
+		HelmRelease:   *helmRelease,
+		HelmNamespace: *helmNamespace,
+		HelmValues:    helmValues,
+		KustomizePath: *kustomizePath,
+	})
 	if err != nil {
 		return err
 	}
@@ -291,12 +317,12 @@ func normalizeScanArgs(args []string) []string {
 	return append(flagArgs, pathArgs...)
 }
 
-func normalizeOutputArgs(args []string) []string {
+func normalizeBaselineArgs(args []string) []string {
 	flagArgs := make([]string, 0, len(args))
 	pathArgs := make([]string, 0, len(args))
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if arg == "--output" {
+		if arg == "--output" || arg == "--helm-chart" || arg == "--helm-release" || arg == "--helm-namespace" || arg == "--helm-values" || arg == "--kustomize" {
 			flagArgs = append(flagArgs, arg)
 			if index+1 < len(args) {
 				index++
@@ -304,7 +330,7 @@ func normalizeOutputArgs(args []string) []string {
 			}
 			continue
 		}
-		if strings.HasPrefix(arg, "--output=") {
+		if strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--helm-chart=") || strings.HasPrefix(arg, "--helm-release=") || strings.HasPrefix(arg, "--helm-namespace=") || strings.HasPrefix(arg, "--helm-values=") || strings.HasPrefix(arg, "--kustomize=") {
 			flagArgs = append(flagArgs, arg)
 			continue
 		}
@@ -313,12 +339,12 @@ func normalizeOutputArgs(args []string) []string {
 	return append(flagArgs, pathArgs...)
 }
 
-func normalizeConfigArgs(args []string) []string {
+func normalizeReviewArgs(args []string) []string {
 	flagArgs := make([]string, 0, len(args))
 	pathArgs := make([]string, 0, len(args))
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if arg == "--config" {
+		if arg == "--config" || arg == "--helm-chart" || arg == "--helm-release" || arg == "--helm-namespace" || arg == "--helm-values" || arg == "--kustomize" {
 			flagArgs = append(flagArgs, arg)
 			if index+1 < len(args) {
 				index++
@@ -326,7 +352,7 @@ func normalizeConfigArgs(args []string) []string {
 			}
 			continue
 		}
-		if strings.HasPrefix(arg, "--config=") {
+		if strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "--helm-chart=") || strings.HasPrefix(arg, "--helm-release=") || strings.HasPrefix(arg, "--helm-namespace=") || strings.HasPrefix(arg, "--helm-values=") || strings.HasPrefix(arg, "--kustomize=") {
 			flagArgs = append(flagArgs, arg)
 			continue
 		}
@@ -372,5 +398,12 @@ Scan flags:
   --kustomize render a Kustomize directory before scanning
 
 Baseline flags:
-  --output   baseline output file`)
+  --output   baseline output file
+
+Render flags:
+  --helm-chart render a Helm chart before scanning
+  --helm-release Helm release name
+  --helm-namespace Helm namespace
+  --helm-values Helm values file; may be repeated
+  --kustomize render a Kustomize directory before scanning`)
 }
