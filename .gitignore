@@ -1,0 +1,8 @@
+.DS_Store
+.env
+bin/
+coverage.out
+dist/
+tmp/
+*.sarif
+*.log
