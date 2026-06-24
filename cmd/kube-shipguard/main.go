@@ -7,9 +7,11 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/yankawai/kube-shipguard/internal/analyzer"
 	"github.com/yankawai/kube-shipguard/internal/baseline"
+	"github.com/yankawai/kube-shipguard/internal/config"
 	"github.com/yankawai/kube-shipguard/internal/report"
 	"github.com/yankawai/kube-shipguard/internal/scanner"
 	"github.com/yankawai/kube-shipguard/internal/tui"
@@ -61,6 +63,7 @@ func runScan(args []string, stdout io.Writer) error {
 	output := flags.String("output", "", "write output to file")
 	failOn := flags.String("fail-on", "high", "minimum severity that fails: none, low, medium, high")
 	baselinePath := flags.String("baseline", "", "ignore findings already captured in a baseline file")
+	configPath := flags.String("config", "", "configuration file with expiring suppressions")
 	if err := flags.Parse(normalizeScanArgs(args)); err != nil {
 		return err
 	}
@@ -75,6 +78,11 @@ func runScan(args []string, stdout io.Writer) error {
 		return err
 	}
 	findings := analyzer.New().Analyze(resources)
+	configResult, err := config.Apply(*configPath, findings, time.Now())
+	if err != nil {
+		return err
+	}
+	findings = configResult.Findings
 	baselineResult, err := baseline.Apply(*baselinePath, findings)
 	if err != nil {
 		return err
@@ -94,6 +102,11 @@ func runScan(args []string, stdout io.Writer) error {
 
 	switch *format {
 	case "text":
+		if configResult.Suppressed > 0 {
+			if _, err := fmt.Fprintf(writer, "Config suppressed %d accepted findings\n\n", configResult.Suppressed); err != nil {
+				return err
+			}
+		}
 		if baselineResult.Suppressed > 0 {
 			if _, err := fmt.Fprintf(writer, "Baseline suppressed %d known findings\n\n", baselineResult.Suppressed); err != nil {
 				return err
@@ -145,7 +158,8 @@ func runBaseline(args []string, stdout io.Writer) error {
 func runReview(args []string) error {
 	flags := flag.NewFlagSet("review", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	if err := flags.Parse(args); err != nil {
+	configPath := flags.String("config", "", "configuration file with expiring suppressions")
+	if err := flags.Parse(normalizeConfigArgs(args)); err != nil {
 		return err
 	}
 	paths := flags.Args()
@@ -157,6 +171,11 @@ func runReview(args []string) error {
 		return err
 	}
 	findings := analyzer.New().Analyze(resources)
+	configResult, err := config.Apply(*configPath, findings, time.Now())
+	if err != nil {
+		return err
+	}
+	findings = configResult.Findings
 	_, err = tea.NewProgram(tui.New(findings), tea.WithAltScreen()).Run()
 	return err
 }
@@ -166,7 +185,7 @@ func normalizeScanArgs(args []string) []string {
 	pathArgs := make([]string, 0, len(args))
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if arg == "--format" || arg == "--output" || arg == "--fail-on" || arg == "--baseline" {
+		if arg == "--format" || arg == "--output" || arg == "--fail-on" || arg == "--baseline" || arg == "--config" {
 			flagArgs = append(flagArgs, arg)
 			if index+1 < len(args) {
 				index++
@@ -174,7 +193,7 @@ func normalizeScanArgs(args []string) []string {
 			}
 			continue
 		}
-		if strings.HasPrefix(arg, "--format=") || strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--fail-on=") || strings.HasPrefix(arg, "--baseline=") {
+		if strings.HasPrefix(arg, "--format=") || strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--fail-on=") || strings.HasPrefix(arg, "--baseline=") || strings.HasPrefix(arg, "--config=") {
 			flagArgs = append(flagArgs, arg)
 			continue
 		}
@@ -197,6 +216,28 @@ func normalizeOutputArgs(args []string) []string {
 			continue
 		}
 		if strings.HasPrefix(arg, "--output=") {
+			flagArgs = append(flagArgs, arg)
+			continue
+		}
+		pathArgs = append(pathArgs, arg)
+	}
+	return append(flagArgs, pathArgs...)
+}
+
+func normalizeConfigArgs(args []string) []string {
+	flagArgs := make([]string, 0, len(args))
+	pathArgs := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if arg == "--config" {
+			flagArgs = append(flagArgs, arg)
+			if index+1 < len(args) {
+				index++
+				flagArgs = append(flagArgs, args[index])
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--config=") {
 			flagArgs = append(flagArgs, arg)
 			continue
 		}
@@ -235,6 +276,7 @@ Scan flags:
   --output   output file path
   --fail-on  none, low, medium, or high
   --baseline ignore known findings from a baseline file
+  --config   config file with expiring suppressions
 
 Baseline flags:
   --output   baseline output file`)
