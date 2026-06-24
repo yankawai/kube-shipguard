@@ -21,6 +21,7 @@ Kubernetes manifests often pass syntax validation while still being unsafe to sh
 - Supports `Deployment`, `StatefulSet`, `DaemonSet`, `Pod`, `Service`, `Secret`, `ConfigMap`, `PodDisruptionBudget`, and `NetworkPolicy`.
 - Detects missing probes, missing resource requests/limits, unsafe security contexts, mutable image tags, single-replica workloads, missing PDBs, and missing NetworkPolicies.
 - Emits text, JSON, and SARIF output.
+- Includes an interactive terminal review mode for local manifest reviews.
 - Supports CI failure gates by severity.
 - Ships with a reusable GitHub Action.
 
@@ -47,6 +48,12 @@ Run the unsafe example without failing the process:
 
 ```bash
 make demo
+```
+
+Open an interactive terminal review:
+
+```bash
+go run ./cmd/kube-shipguard review examples/unsafe
 ```
 
 ## Example output
