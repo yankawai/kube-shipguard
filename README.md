@@ -24,6 +24,10 @@ Kubernetes manifests often pass syntax validation while still being unsafe to sh
 - Detects missing probes, missing resource requests/limits, unsafe security contexts, mutable image tags, single-replica workloads, missing PDBs, and missing NetworkPolicies.
 - Emits text, JSON, and SARIF output.
 - Includes an interactive terminal review mode for local manifest reviews.
+- Supports release verdicts with risk scoring: `SHIP`, `REVIEW`, or `BLOCK`.
+- Supports diff-aware PR scanning with `--changed-from`.
+- Supports baselines for legacy findings and expiring suppressions for accepted exceptions.
+- Scans rendered Helm and Kustomize output.
 - Supports CI failure gates by severity.
 - Ships with a reusable GitHub Action.
 
@@ -44,6 +48,26 @@ Generate SARIF for GitHub code scanning:
 
 ```bash
 go run ./cmd/kube-shipguard scan deploy --format sarif --output kube-shipguard.sarif
+```
+
+Scan only changed manifests in a pull request:
+
+```bash
+go run ./cmd/kube-shipguard scan deploy --changed-from origin/main --fail-on high
+```
+
+Create a baseline for existing findings, then fail only on new risk:
+
+```bash
+go run ./cmd/kube-shipguard baseline deploy --output .kube-shipguard-baseline.yaml
+go run ./cmd/kube-shipguard scan deploy --baseline .kube-shipguard-baseline.yaml --fail-on high
+```
+
+Scan rendered manifests:
+
+```bash
+go run ./cmd/kube-shipguard scan --helm-chart charts/api --helm-values values-prod.yaml
+go run ./cmd/kube-shipguard scan --kustomize overlays/prod
 ```
 
 Run the unsafe example without failing the process:
@@ -101,6 +125,9 @@ jobs:
       - uses: yankawai/kube-shipguard@v1
         with:
           path: deploy
+          changed-from: origin/main
+          baseline: .kube-shipguard-baseline.yaml
+          config: .kube-shipguard.yaml
           fail-on: high
           format: sarif
           output: kube-shipguard.sarif

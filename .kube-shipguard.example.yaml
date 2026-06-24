@@ -1,0 +1,7 @@
+suppressions:
+  - rule: KSG014
+    kind: Service
+    namespace: default
+    name: api-public
+    reason: public endpoint is reviewed and protected by external controls
+    expires: 2026-12-31

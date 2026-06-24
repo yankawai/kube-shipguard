@@ -19,6 +19,38 @@ inputs:
     description: Output file path.
     required: false
     default: kube-shipguard.sarif
+  config:
+    description: Optional Kube ShipGuard config file with expiring suppressions.
+    required: false
+    default: ""
+  baseline:
+    description: Optional baseline file used to ignore known findings.
+    required: false
+    default: ""
+  changed-from:
+    description: Optional git ref or range used to scan only changed YAML files.
+    required: false
+    default: ""
+  helm-chart:
+    description: Optional Helm chart path to render before scanning.
+    required: false
+    default: ""
+  helm-release:
+    description: Optional Helm release name for rendered manifests.
+    required: false
+    default: ""
+  helm-namespace:
+    description: Optional Helm namespace for rendered manifests.
+    required: false
+    default: ""
+  helm-values:
+    description: Optional comma-separated Helm values files.
+    required: false
+    default: ""
+  kustomize:
+    description: Optional Kustomize directory to render before scanning.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -31,7 +63,23 @@ runs:
     - name: Run Kube ShipGuard
       shell: bash
       run: |
-        go run github.com/yankawai/kube-shipguard/cmd/kube-shipguard@main scan "${{ inputs.path }}" \
-          --format "${{ inputs.format }}" \
-          --output "${{ inputs.output }}" \
-          --fail-on "${{ inputs.fail-on }}"
+        args=(scan "${{ inputs.path }}"
+          --format "${{ inputs.format }}"
+          --output "${{ inputs.output }}"
+          --fail-on "${{ inputs.fail-on }}")
+
+        if [ -n "${{ inputs.config }}" ]; then args+=(--config "${{ inputs.config }}"); fi
+        if [ -n "${{ inputs.baseline }}" ]; then args+=(--baseline "${{ inputs.baseline }}"); fi
+        if [ -n "${{ inputs.changed-from }}" ]; then args+=(--changed-from "${{ inputs.changed-from }}"); fi
+        if [ -n "${{ inputs.helm-chart }}" ]; then args+=(--helm-chart "${{ inputs.helm-chart }}"); fi
+        if [ -n "${{ inputs.helm-release }}" ]; then args+=(--helm-release "${{ inputs.helm-release }}"); fi
+        if [ -n "${{ inputs.helm-namespace }}" ]; then args+=(--helm-namespace "${{ inputs.helm-namespace }}"); fi
+        if [ -n "${{ inputs.kustomize }}" ]; then args+=(--kustomize "${{ inputs.kustomize }}"); fi
+        if [ -n "${{ inputs.helm-values }}" ]; then
+          IFS=',' read -ra values_files <<< "${{ inputs.helm-values }}"
+          for values_file in "${values_files[@]}"; do
+            args+=(--helm-values "$values_file")
+          done
+        fi
+
+        go run github.com/yankawai/kube-shipguard/cmd/kube-shipguard@main "${args[@]}"
