@@ -56,6 +56,14 @@ Open an interactive terminal review:
 go run ./cmd/kube-shipguard review examples/unsafe
 ```
 
+Review mode shortcuts:
+
+- `1`, `2`, `3`, `a` filter high, medium, low, or all findings;
+- `/` searches rule IDs, files, resources, messages, and remediation text;
+- `?` opens the help overlay;
+- `j/k`, arrow keys, `home`, and `end` navigate findings;
+- `q` exits.
+
 ## Example output
 
 ```text
