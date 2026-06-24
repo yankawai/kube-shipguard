@@ -36,3 +36,29 @@ func TestAnalyzeUnsafeManifestFindsHighRiskIssues(t *testing.T) {
 		}
 	}
 }
+
+func TestFindingFingerprintIsStableForSameFinding(t *testing.T) {
+	finding := Finding{
+		RuleID:    "KSG006",
+		Severity:  SeverityHigh,
+		Message:   "container api uses a mutable image tag",
+		File:      "deploy/api.yaml",
+		Kind:      "Deployment",
+		Namespace: "default",
+		Name:      "api",
+		Container: "api",
+	}
+
+	copy := finding
+	if finding.Fingerprint() == "" {
+		t.Fatal("expected non-empty fingerprint")
+	}
+	if finding.Fingerprint() != copy.Fingerprint() {
+		t.Fatal("expected equal findings to have equal fingerprints")
+	}
+
+	copy.Container = "worker"
+	if finding.Fingerprint() == copy.Fingerprint() {
+		t.Fatal("expected changed finding identity to change fingerprint")
+	}
+}

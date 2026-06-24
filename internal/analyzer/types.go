@@ -1,6 +1,8 @@
 package analyzer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -31,6 +33,20 @@ func (f Finding) Location() string {
 		namespace = "default"
 	}
 	return fmt.Sprintf("%s %s/%s", namespace, f.Kind, f.Name)
+}
+
+func (f Finding) Fingerprint() string {
+	parts := []string{
+		f.RuleID,
+		f.File,
+		f.Kind,
+		f.Namespace,
+		f.Name,
+		f.Container,
+		f.Message,
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
 }
 
 func SeverityAtLeast(actual, threshold Severity) bool {
