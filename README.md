@@ -9,6 +9,8 @@ Kube ShipGuard is an open-source Kubernetes release-readiness scanner for platfo
 
 The scanner focuses on production signals that reviewers usually look for manually: probes, resources, non-root containers, read-only filesystems, image tags, PodDisruptionBudgets, NetworkPolicies, and risky Secret/ConfigMap patterns.
 
+![Kube ShipGuard terminal review](docs/assets/kube-shipguard-review.png)
+
 ## Why it exists
 
 Kubernetes manifests often pass syntax validation while still being unsafe to ship. Kube ShipGuard adds a release gate that answers a more useful question:
