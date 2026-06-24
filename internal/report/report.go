@@ -57,6 +57,9 @@ func WriteText(writer io.Writer, findings []analyzer.Finding) error {
 
 func WriteJSON(writer io.Writer, findings []analyzer.Finding) error {
 	sortFindings(findings)
+	if findings == nil {
+		findings = []analyzer.Finding{}
+	}
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(JSONReport{

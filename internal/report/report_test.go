@@ -35,6 +35,16 @@ func TestWriteJSON(t *testing.T) {
 	}
 }
 
+func TestWriteJSONUsesEmptyFindingsArray(t *testing.T) {
+	var buffer bytes.Buffer
+	if err := WriteJSON(&buffer, nil); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	if !strings.Contains(buffer.String(), `"findings": []`) {
+		t.Fatalf("expected empty findings array: %s", buffer.String())
+	}
+}
+
 func TestWriteTextIncludesVerdict(t *testing.T) {
 	var buffer bytes.Buffer
 	err := WriteText(&buffer, []analyzer.Finding{{
