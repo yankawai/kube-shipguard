@@ -96,6 +96,14 @@ jobs:
           output: kube-shipguard.sarif
 ```
 
+For SARIF upload, add:
+
+```yaml
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: kube-shipguard.sarif
+```
+
 ## Checks
 
 | Rule | Severity | Description |

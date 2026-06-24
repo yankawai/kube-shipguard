@@ -1,0 +1,28 @@
+name: Bug report
+description: Report incorrect scanner behavior or CLI failure.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What failed?
+    validations:
+      required: true
+  - type: textarea
+    id: manifest
+    attributes:
+      label: Minimal manifest
+      description: Include the smallest manifest that reproduces the issue.
+      render: yaml
+    validations:
+      required: false
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and output
+      render: shell
+    validations:
+      required: true

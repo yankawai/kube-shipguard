@@ -1,0 +1,20 @@
+name: Rule request
+description: Propose a new Kubernetes release-readiness rule.
+title: "rule: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk
+      description: What production risk should the rule detect?
+    validations:
+      required: true
+  - type: textarea
+    id: detection
+    attributes:
+      label: Detection logic
+      description: Describe the expected manifest pattern and false-positive trade-offs.
+    validations:
+      required: true
