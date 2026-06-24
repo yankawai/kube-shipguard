@@ -12,6 +12,7 @@ import (
 	"github.com/yankawai/kube-shipguard/internal/analyzer"
 	"github.com/yankawai/kube-shipguard/internal/baseline"
 	"github.com/yankawai/kube-shipguard/internal/config"
+	"github.com/yankawai/kube-shipguard/internal/gitdiff"
 	"github.com/yankawai/kube-shipguard/internal/report"
 	"github.com/yankawai/kube-shipguard/internal/scanner"
 	"github.com/yankawai/kube-shipguard/internal/tui"
@@ -64,20 +65,32 @@ func runScan(args []string, stdout io.Writer) error {
 	failOn := flags.String("fail-on", "high", "minimum severity that fails: none, low, medium, high")
 	baselinePath := flags.String("baseline", "", "ignore findings already captured in a baseline file")
 	configPath := flags.String("config", "", "configuration file with expiring suppressions")
+	changedFrom := flags.String("changed-from", "", "only scan YAML files changed from the git ref or range")
 	if err := flags.Parse(normalizeScanArgs(args)); err != nil {
 		return err
 	}
 
 	paths := flags.Args()
-	if len(paths) == 0 {
+	if len(paths) == 0 && *changedFrom == "" {
 		return errors.New("scan requires at least one file or directory")
 	}
 
-	resources, err := scanner.Load(paths)
-	if err != nil {
-		return err
+	var err error
+	if *changedFrom != "" {
+		paths, err = gitdiff.ChangedYAML(*changedFrom, paths)
+		if err != nil {
+			return err
+		}
 	}
-	findings := analyzer.New().Analyze(resources)
+
+	var findings []analyzer.Finding
+	if len(paths) > 0 {
+		resources, err := scanner.Load(paths)
+		if err != nil {
+			return err
+		}
+		findings = analyzer.New().Analyze(resources)
+	}
 	configResult, err := config.Apply(*configPath, findings, time.Now())
 	if err != nil {
 		return err
@@ -185,7 +198,7 @@ func normalizeScanArgs(args []string) []string {
 	pathArgs := make([]string, 0, len(args))
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if arg == "--format" || arg == "--output" || arg == "--fail-on" || arg == "--baseline" || arg == "--config" {
+		if arg == "--format" || arg == "--output" || arg == "--fail-on" || arg == "--baseline" || arg == "--config" || arg == "--changed-from" {
 			flagArgs = append(flagArgs, arg)
 			if index+1 < len(args) {
 				index++
@@ -193,7 +206,7 @@ func normalizeScanArgs(args []string) []string {
 			}
 			continue
 		}
-		if strings.HasPrefix(arg, "--format=") || strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--fail-on=") || strings.HasPrefix(arg, "--baseline=") || strings.HasPrefix(arg, "--config=") {
+		if strings.HasPrefix(arg, "--format=") || strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--fail-on=") || strings.HasPrefix(arg, "--baseline=") || strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "--changed-from=") {
 			flagArgs = append(flagArgs, arg)
 			continue
 		}
@@ -277,6 +290,7 @@ Scan flags:
   --fail-on  none, low, medium, or high
   --baseline ignore known findings from a baseline file
   --config   config file with expiring suppressions
+  --changed-from only scan YAML files changed from a git ref or range
 
 Baseline flags:
   --output   baseline output file`)
