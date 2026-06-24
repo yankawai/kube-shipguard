@@ -39,6 +39,8 @@ Use `--changed-from` when a repository already has legacy risk and the pull requ
 kube-shipguard scan deploy --changed-from origin/main --fail-on high
 ```
 
+In GitHub Actions, set `fetch-depth: 0` on `actions/checkout` when the base ref may not be present in the shallow checkout.
+
 If no path is provided, Kube ShipGuard uses `.` as the diff scope:
 
 ```bash
