@@ -63,11 +63,12 @@ runs:
     - name: Run Kube ShipGuard
       shell: bash
       run: |
-        args=(scan "${{ inputs.path }}"
+        args=(scan
           --format "${{ inputs.format }}"
           --output "${{ inputs.output }}"
           --fail-on "${{ inputs.fail-on }}")
 
+        if [ -n "${{ inputs.path }}" ]; then args+=("${{ inputs.path }}"); fi
         if [ -n "${{ inputs.config }}" ]; then args+=(--config "${{ inputs.config }}"); fi
         if [ -n "${{ inputs.baseline }}" ]; then args+=(--baseline "${{ inputs.baseline }}"); fi
         if [ -n "${{ inputs.changed-from }}" ]; then args+=(--changed-from "${{ inputs.changed-from }}"); fi
