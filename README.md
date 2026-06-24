@@ -27,7 +27,7 @@ Kubernetes manifests often pass syntax validation while still being unsafe to sh
 ## Quick start
 
 ```bash
-go run ./cmd/kube-shipguard scan examples --format text --fail-on high
+go run ./cmd/kube-shipguard scan examples/secure --format text --fail-on high
 ```
 
 Build the binary:
@@ -41,6 +41,12 @@ Generate SARIF for GitHub code scanning:
 
 ```bash
 go run ./cmd/kube-shipguard scan deploy --format sarif --output kube-shipguard.sarif
+```
+
+Run the unsafe example without failing the process:
+
+```bash
+make demo
 ```
 
 ## Example output

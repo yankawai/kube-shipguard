@@ -19,7 +19,11 @@ build:
 
 .PHONY: scan
 scan:
-	go run ./cmd/kube-shipguard scan examples --format text --fail-on high
+	go run ./cmd/kube-shipguard scan examples/secure --format text --fail-on high
+
+.PHONY: demo
+demo:
+	go run ./cmd/kube-shipguard scan examples/unsafe --format text --fail-on none
 
 .PHONY: sarif
 sarif:
