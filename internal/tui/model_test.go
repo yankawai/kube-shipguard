@@ -41,3 +41,18 @@ func TestSearchFiltersVisibleFindings(t *testing.T) {
 		t.Fatalf("unexpected search result: %#v", findings[0])
 	}
 }
+
+func TestViewIncludesTerminalBrand(t *testing.T) {
+	model := New([]analyzer.Finding{
+		{RuleID: "KSG006", Severity: analyzer.SeverityHigh, Message: "mutable image", Kind: "Deployment", Name: "api", File: "api.yaml"},
+	})
+	model.width = 140
+
+	view := model.View()
+	if !strings.Contains(view, "SHIPGUARD") {
+		t.Fatalf("expected brand in view: %s", view)
+	}
+	if !strings.Contains(view, "GATE: BLOCK") {
+		t.Fatalf("expected gate status in view: %s", view)
+	}
+}

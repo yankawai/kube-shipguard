@@ -114,10 +114,12 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	filtered := m.filteredFindings()
 	if len(m.findings) == 0 {
-		return frame("Kube ShipGuard", successStyle.Render("No findings. This manifest set is ready to ship."), m.width)
+		return frame(m.brandView(filtered)+"\n\n"+successStyle.Render("No findings. This manifest set is ready to ship."), m.width)
 	}
 
 	var builder strings.Builder
+	builder.WriteString(m.brandView(filtered))
+	builder.WriteString("\n\n")
 	builder.WriteString(m.header(filtered))
 	builder.WriteString("\n")
 	builder.WriteString(m.toolbar())
@@ -134,7 +136,7 @@ func (m Model) View() string {
 	builder.WriteString("\n\n")
 	builder.WriteString(helpStyle.Render("j/k or up/down · 1 high · 2 medium · 3 low · a all · / search · ? help · q quit"))
 
-	return frame("Kube ShipGuard", builder.String(), m.width)
+	return frame(builder.String(), m.width)
 }
 
 func (m Model) header(filtered []analyzer.Finding) string {
@@ -151,6 +153,72 @@ func (m Model) header(filtered []analyzer.Finding) string {
 		lowStyle.Render(fmt.Sprintf("%d low", low)),
 		mutedStyle.Render(fmt.Sprintf("showing %d · %s", len(filtered), filterLabel)),
 	)
+}
+
+func (m Model) brandView(filtered []analyzer.Finding) string {
+	high, medium, low := countBySeverity(m.findings)
+	status := gateStatus(high, medium)
+	logo := logoStyle.Render(shipguardLogo)
+	meta := strings.Join([]string{
+		labelStyle.Render("KUBERNETES RELEASE READINESS"),
+		fmt.Sprintf("%s  %s  %s", status.style.Render(status.label), mutedStyle.Render("static manifest review"), mutedStyle.Render("SARIF-ready")),
+		fmt.Sprintf("%s  %s  %s  %s",
+			highStyle.Render(fmt.Sprintf("%d high", high)),
+			mediumStyle.Render(fmt.Sprintf("%d medium", medium)),
+			lowStyle.Render(fmt.Sprintf("%d low", low)),
+			mutedStyle.Render(fmt.Sprintf("%d visible", len(filtered))),
+		),
+		riskBar(high, medium, low),
+	}, "\n")
+
+	if m.width >= 132 {
+		return lipgloss.JoinHorizontal(lipgloss.Top, logo, "  ", brandPanelStyle.Render(meta))
+	}
+	return logo + "\n" + brandPanelStyle.Render(meta)
+}
+
+type statusLabel struct {
+	label string
+	style lipgloss.Style
+}
+
+func gateStatus(high, medium int) statusLabel {
+	switch {
+	case high > 0:
+		return statusLabel{label: "GATE: BLOCK", style: highStyle}
+	case medium > 0:
+		return statusLabel{label: "GATE: REVIEW", style: mediumStyle}
+	default:
+		return statusLabel{label: "GATE: SHIP", style: successStyle}
+	}
+}
+
+func riskBar(high, medium, low int) string {
+	total := high + medium + low
+	if total == 0 {
+		return successStyle.Render("████████████████████") + mutedStyle.Render(" clean")
+	}
+	highWidth := scaledWidth(high, total)
+	mediumWidth := scaledWidth(medium, total)
+	lowWidth := scaledWidth(low, total)
+	colored := highStyle.Render(strings.Repeat("█", highWidth))
+	colored += mediumStyle.Render(strings.Repeat("█", mediumWidth))
+	colored += lowStyle.Render(strings.Repeat("█", lowWidth))
+	if fill := 20 - highWidth - mediumWidth - lowWidth; fill > 0 {
+		colored += mutedStyle.Render(strings.Repeat("░", fill))
+	}
+	return colored + mutedStyle.Render(" risk mix")
+}
+
+func scaledWidth(value, total int) int {
+	if value == 0 || total == 0 {
+		return 0
+	}
+	width := value * 20 / total
+	if width == 0 {
+		return 1
+	}
+	return width
 }
 
 func (m Model) toolbar() string {
@@ -296,12 +364,12 @@ func countBySeverity(findings []analyzer.Finding) (int, int, int) {
 	return high, medium, low
 }
 
-func frame(title, body string, width int) string {
+func frame(body string, width int) string {
 	contentWidth := width - 4
 	if contentWidth < 96 {
 		contentWidth = 96
 	}
-	return appStyle.Width(contentWidth).Render(titleStyle.Render(title) + "\n\n" + body)
+	return appStyle.Width(contentWidth).Render(body)
 }
 
 func truncate(value string, max int) string {
@@ -360,8 +428,18 @@ var ruleCatalog = map[string]string{
 	"KSG014": "Direct LoadBalancer exposure should be intentional and reviewed.",
 }
 
+const shipguardLogo = `██╗  ██╗██╗   ██╗██████╗ ███████╗
+██║ ██╔╝██║   ██║██╔══██╗██╔════╝
+█████╔╝ ██║   ██║██████╔╝█████╗
+██╔═██╗ ██║   ██║██╔══██╗██╔══╝
+██║  ██╗╚██████╔╝██████╔╝███████╗
+╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝
+        SHIPGUARD`
+
 var (
 	appStyle          = lipgloss.NewStyle().Padding(1, 2)
+	logoStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+	labelStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
 	titleStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
 	mutedStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
@@ -375,6 +453,7 @@ var (
 	rowStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 	activeRowStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
 	panelStyle        = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("8")).Padding(1, 2)
+	brandPanelStyle   = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")).Padding(1, 2)
 	subtlePanelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Background(lipgloss.Color("0")).Padding(0, 1)
 	activeSearchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true)
 )
