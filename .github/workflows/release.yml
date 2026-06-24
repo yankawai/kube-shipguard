@@ -1,0 +1,49 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA::12}" \
+            -o "dist/kube-shipguard-${GOOS}-${GOARCH}" ./cmd/kube-shipguard
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: kube-shipguard-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*

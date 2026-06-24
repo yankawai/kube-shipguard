@@ -27,7 +27,7 @@ demo:
 
 .PHONY: sarif
 sarif:
-	go run ./cmd/kube-shipguard scan examples --format sarif --output kube-shipguard.sarif --fail-on high
+	go run ./cmd/kube-shipguard scan examples/unsafe --format sarif --output kube-shipguard.sarif --fail-on none
 
 .PHONY: validate
 validate: test vet scan
